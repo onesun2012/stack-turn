@@ -1,9 +1,8 @@
 import { CONFIG } from './config';
 import { slice1D, type Piece } from './cutter';
 import { nextCombo, regrowSize, sliderSpeed } from './scoring';
+import { axisForLayer, type Axis } from './rotation';
 import { Emitter } from '../core/emitter';
-
-export type Axis = 'x' | 'z';
 
 export interface Block {
   x: number;
@@ -27,6 +26,7 @@ export type SessionState = 'idle' | 'playing' | 'dropping' | 'over';
 
 export type SessionEvents = {
   'slider-spawned': { slider: SliderState; layer: number };
+  'axis-changed': { axis: Axis; layer: number };
   placed: { layer: number; block: Block; kind: 'perfect' | 'cut'; debris: Block[] };
   'game-over': { layers: number; fallen: Block };
 };
@@ -40,7 +40,7 @@ export class GameSession {
   combo = 0;
   layers = 0;
 
-  /** 当前滑动轴。M1 恒为 'x'；M2 的滑轨旋转只需切换此字段。 */
+  /** 当前滑动轴（每次 spawnSlider 按层数重算） */
   axis: Axis = 'x';
 
   get topBlock(): Block {
@@ -58,14 +58,14 @@ export class GameSession {
     }];
     this.combo = 0;
     this.layers = 0;
+    this.axis = 'x';
     this.state = 'playing';
     this.spawnSlider();
   }
 
   /** 玩家点按：滑块停止平移，开始下落 */
   tap(): void {
-    if (this.state !== 'playing') return;
-    this.state = 'dropping';
+    if (this.state === 'playing') this.state = 'dropping';
   }
 
   update(dt: number): void {
@@ -100,19 +100,39 @@ export class GameSession {
     return this.towerTopY + CONFIG.BLOCK_HEIGHT;
   }
 
+  /**
+   * 生成下一层滑块：
+   * - 滑动轴按层数重算（每 N 层换轴，本作核心机制）
+   * - 滑动轴坐标从段的一端出发，左右交替
+   * - 横轴坐标对齐当前塔顶 —— 塔会因切割漂移，不能写死 0
+   */
   private spawnSlider(): void {
     const top = this.topBlock;
     const layer = this.tower.length;
-    this.slider = {
+    const prevAxis = this.axis;
+    this.axis = axisForLayer(layer);
+    if (this.axis !== prevAxis) {
+      this.events.emit('axis-changed', { axis: this.axis, layer });
+    }
+
+    const dir: 1 | -1 = layer % 2 === 0 ? -1 : 1;
+    const slider: SliderState = {
       x: 0, z: 0,
       y: this.nextLayerY() + CONFIG.HOVER_HEIGHT,
-      width: top.width,   // 继承下层尺寸
+      width: top.width,    // 继承下层尺寸
       depth: top.depth,
-      dir: 1,
+      dir,
       speed: sliderSpeed(layer),
     };
-    this.writeAxis(this.slider, -CONFIG.SLIDER_RANGE);
-    this.events.emit('slider-spawned', { slider: { ...this.slider }, layer });
+    if (this.axis === 'x') {
+      slider.x = -dir * CONFIG.SLIDER_RANGE;
+      slider.z = top.z;
+    } else {
+      slider.z = -dir * CONFIG.SLIDER_RANGE;
+      slider.x = top.x;
+    }
+    this.slider = slider;
+    this.events.emit('slider-spawned', { slider: { ...slider }, layer });
   }
 
   /** 落地结算：切割判定 → 更新塔/连击 → 发事件 → 生成下一块 */

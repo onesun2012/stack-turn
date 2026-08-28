@@ -11,8 +11,12 @@ const gameScene = new GameScene(container);
 const session = new GameSession();
 const view = new GameView(gameScene.scene, gameScene.camera);
 
-// 逻辑事件 → 渲染映射（两层在此接线，互不感知）
 session.events.on('slider-spawned', ({ slider, layer }) => view.spawnSlider(slider, layer));
+
+// M3 会换成换轴视觉提示（闪光/色块脉冲），先用日志验证机制
+session.events.on('axis-changed', ({ axis, layer }) => {
+  console.log(`第 ${layer} 层换轴 → ${axis}`); // 临时
+});
 
 session.events.on('placed', ({ block, debris, layer, kind }) => {
   view.addPlacedBlock(block, layer);
@@ -22,7 +26,7 @@ session.events.on('placed', ({ block, debris, layer, kind }) => {
 
 session.events.on('game-over', ({ fallen }) => {
   view.spawnDebris([fallen], session.topBlock, session.tower.length);
-  view.startGameOver(session.towerTopY);
+  view.startGameOver(session.topBlock);
   console.log(`游戏结束：${session.layers} 层`); // 临时，M3 换结算屏
 });
 
@@ -38,7 +42,7 @@ onTap(() => {
 const loop = new GameLoop((dt) => {
   session.update(dt);
   view.syncSlider(session.slider);
-  view.update(dt, session.towerTopY);
+  view.update(dt, session.topBlock);
   gameScene.render();
 });
 

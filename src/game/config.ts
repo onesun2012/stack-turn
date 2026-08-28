@@ -10,6 +10,8 @@ export const CONFIG = {
   SPEED_INC: 0.12,      // 每层增速
   MAX_SPEED: 9,
 
+  ROTATION_INTERVAL: 3, // 滑轨旋转间隔：每 N 层换一次轴（本作核心机制）
+
   PERFECT_TOLERANCE: 0.3, // 完美判定容差（中心偏差）
   GROW_AFTER: 3,          // 连续完美达到该次数后开始回涨
   GROW_STEP: 0.25,        // 每次回涨量
