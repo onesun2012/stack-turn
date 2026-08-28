@@ -25,10 +25,9 @@ export interface SliderState {
 export type SessionState = 'idle' | 'playing' | 'dropping' | 'over';
 
 export type SessionEvents = {
-  'slider-spawned': { slider: SliderState; layer: number };
-  'axis-changed': { axis: Axis; layer: number };
+  'slider-spawned': { slider: SliderState; layer: number; axisChanged: boolean };
   placed: { layer: number; block: Block; kind: 'perfect' | 'cut'; debris: Block[] };
-  'game-over': { layers: number; fallen: Block };
+  'game-over': { layers: number; maxCombo: number; fallen: Block };
 };
 
 export class GameSession {
@@ -38,6 +37,7 @@ export class GameSession {
   tower: Block[] = [];
   slider: SliderState | null = null;
   combo = 0;
+  maxCombo = 0;
   layers = 0;
 
   /** 当前滑动轴（每次 spawnSlider 按层数重算） */
@@ -57,6 +57,7 @@ export class GameSession {
       width: CONFIG.INITIAL_SIZE, depth: CONFIG.INITIAL_SIZE,
     }];
     this.combo = 0;
+    this.maxCombo = 0;
     this.layers = 0;
     this.axis = 'x';
     this.state = 'playing';
@@ -111,9 +112,7 @@ export class GameSession {
     const layer = this.tower.length;
     const prevAxis = this.axis;
     this.axis = axisForLayer(layer);
-    if (this.axis !== prevAxis) {
-      this.events.emit('axis-changed', { axis: this.axis, layer });
-    }
+    const axisChanged = this.axis !== prevAxis;
 
     const dir: 1 | -1 = layer % 2 === 0 ? -1 : 1;
     const slider: SliderState = {
@@ -132,7 +131,7 @@ export class GameSession {
       slider.x = top.x;
     }
     this.slider = slider;
-    this.events.emit('slider-spawned', { slider: { ...slider }, layer });
+    this.events.emit('slider-spawned', { slider: { ...slider }, layer, axisChanged });
   }
 
   /** 落地结算：切割判定 → 更新塔/连击 → 发事件 → 生成下一块 */
@@ -157,12 +156,16 @@ export class GameSession {
       this.state = 'over';
       this.events.emit('game-over', {
         layers: this.layers,
+        maxCombo: this.maxCombo,
         fallen: { x: s.x, z: s.z, y, width: s.width, depth: s.depth },
       });
       return;
     }
 
     this.combo = nextCombo(this.combo, result.kind);
+    if (result.kind === 'perfect') {
+      this.maxCombo = Math.max(this.maxCombo, this.combo);
+    }
     const size = result.kind === 'perfect'
       ? regrowSize(result.size, this.combo)
       : result.kept.size;

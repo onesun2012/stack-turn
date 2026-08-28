@@ -2,27 +2,103 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <!-- viewport-fit=cover 为 M3 的安全区适配预留 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>叠转 Stack Turn</title>
     <style>
+      :root { color-scheme: dark; }
       html, body {
         margin: 0; height: 100%; overflow: hidden;
-        background: #1a1a24;
-        /* 移动端输入卫生：禁掉下拉刷新、双指缩放、长按选中 */
-        touch-action: none;
-        overscroll-behavior: none;
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-tap-highlight-color: transparent;
-        -webkit-touch-callout: none;
+        background: #1a1a24; color: #fff;
+        font-family: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+        touch-action: none; overscroll-behavior: none;
+        user-select: none; -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
       }
       #app { height: 100%; }
       canvas { display: block; touch-action: none; }
+
+      /* ---- loading（JS 就绪后被移除；若长期停留说明脚本报错，看 Console）---- */
+      #loading {
+        position: fixed; inset: 0; z-index: 30;
+        display: flex; align-items: center; justify-content: center;
+        background: #1a1a24; color: #8a8a9a;
+        font-size: 14px; letter-spacing: .2em;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse { 50% { opacity: .4; } }
+
+      /* ---- HUD ---- */
+      #hud {
+        position: fixed; inset: 0; z-index: 10; pointer-events: none;
+        display: flex; flex-direction: column; align-items: center;
+        padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
+      }
+      .hud-score {
+        font-size: 56px; font-weight: 700; line-height: 1;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 12px rgba(0,0,0,.35);
+      }
+      .hud-popup {
+        margin-top: 10px; font-size: 15px; letter-spacing: .15em; color: #9be8dd;
+        animation: popup .85s ease-out forwards;
+      }
+      .hud-popup.accent { color: #ffd76e; }
+      @keyframes popup {
+        0%   { opacity: 0; transform: translateY(8px); }
+        25%  { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-14px); }
+      }
+
+      /* ---- 静音按钮 ---- */
+      #mute {
+        position: fixed; z-index: 20;
+        top: calc(env(safe-area-inset-top, 0px) + 14px);
+        right: calc(env(safe-area-inset-right, 0px) + 14px);
+        width: 40px; height: 40px; border: none; border-radius: 50%;
+        background: rgba(255,255,255,.08); color: #fff; font-size: 17px;
+        display: flex; align-items: center; justify-content: center;
+        transition: opacity .2s;
+      }
+      #mute.muted { opacity: .35; }
+
+      /* ---- 全屏覆盖层（标题 / 结算）---- */
+      .screen {
+        position: fixed; inset: 0; z-index: 15; pointer-events: none;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: 8px;
+        background: rgba(20, 20, 32, .35);
+        transition: opacity .4s ease; opacity: 1;
+      }
+      .screen.hidden { opacity: 0; visibility: hidden; }
+      #title h1 { margin: 0; font-size: 64px; font-weight: 800; letter-spacing: .12em; }
+      #title .sub { margin: 0; font-size: 13px; letter-spacing: .5em; text-indent: .5em; color: #9a9ab0; }
+      .hint { margin: 26px 0 0; font-size: 14px; color: #b9b9cc; line-height: 1.8; }
+      .cta { margin-top: 34px; font-size: 14px; letter-spacing: .3em; animation: pulse 1.6s ease-in-out infinite; }
+      #over .label { margin: 0; font-size: 13px; letter-spacing: .4em; text-indent: .4em; color: #9a9ab0; }
+      #over-score {
+        font-size: 88px; font-weight: 800; line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 12px rgba(0,0,0,.35);
+      }
+      #over-detail { font-size: 15px; color: #ffd76e; letter-spacing: .1em; }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="loading">加载中</div>
+    <button id="mute" aria-label="切换音效">♪</button>
+    <div id="title" class="screen">
+      <h1>叠转</h1>
+      <p class="sub">STACK TURN</p>
+      <p class="hint">点按屏幕放下方块<br>每 3 层，滑动方向旋转 90°</p>
+      <p class="cta">点按任意处开始</p>
+    </div>
+    <div id="over" class="screen hidden">
+      <p class="label">本次成绩</p>
+      <div id="over-score">0</div>
+      <div id="over-detail"></div>
+      <p class="cta">点按任意处重开</p>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

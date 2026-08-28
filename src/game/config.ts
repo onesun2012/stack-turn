@@ -3,10 +3,10 @@ export const CONFIG = {
   BLOCK_HEIGHT: 1,      // 单层高度
   INITIAL_SIZE: 5,      // 初始底座边长
   SLIDER_RANGE: 3.5,    // 滑块中心往复范围（±）
-  HOVER_HEIGHT: 2.5,    // 滑块悬停于目标层上方的高度
-  DROP_SPEED: 25,       // 点按后下落速度（单位/秒）
+  HOVER_HEIGHT: 2.2,    // 滑块悬停于目标层上方的高度
+  DROP_SPEED: 30,       // 点按后下落速度（单位/秒）
 
-  BASE_SPEED: 3.5,      // 滑块初速
+  BASE_SPEED: 3.2,      // 滑块初速
   SPEED_INC: 0.12,      // 每层增速
   MAX_SPEED: 9,
 
