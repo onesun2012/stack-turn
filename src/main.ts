@@ -7,6 +7,8 @@ import { onTap } from './input/pointer';
 import { Hud } from './ui/hud';
 import { Screens } from './ui/screens';
 import { Synth } from './audio/synth';
+import { renderShareCard } from './ui/shareCard';
+import { loadBest, saveBest } from './storage/store';
 
 type Phase = 'title' | 'playing' | 'over';
 
@@ -19,26 +21,46 @@ const view = new GameView(gameScene.scene, gameScene.camera);
 const hud = new Hud();
 const screens = new Screens();
 const audio = new Synth();
+const shareCanvas = document.createElement('canvas');
 
 let phase: Phase = 'title';
 let overAt = 0;
 
-// ---- 静音按钮：拦截点按，不能让静音操作触发落块 ----
+// ---- 静音按钮 ----
 const muteBtn = document.getElementById('mute');
 if (muteBtn) {
   muteBtn.classList.toggle('muted', audio.isMuted);
   muteBtn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation(); // 不冒泡到 window 的游戏点按
-    e.preventDefault();  // 不聚焦：避免空格键误触按钮
+    e.stopPropagation();
+    e.preventDefault();
     audio.unlock();
     muteBtn.classList.toggle('muted', audio.toggleMuted());
   });
 }
 
-// ---- 逻辑事件 → 表现层接线（两层在此相见，互不感知）----
+// ---- 分享区：拦下点按（不许触发重开），提供保存 ----
+const shareImg = document.getElementById('share-img');
+const saveBtn = document.getElementById('save-btn');
+
+function downloadCard(): void {
+  if (!(shareImg instanceof HTMLImageElement) || !shareImg.src) return;
+  const a = document.createElement('a');
+  a.href = shareImg.src;
+  a.download = `stack-turn-${session.layers}layers.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+for (const el of [shareImg, saveBtn]) {
+  el?.addEventListener('pointerdown', (e) => e.stopPropagation());
+  el?.addEventListener('click', downloadCard); // 桌面：点按下载；移动端以长按保存为主
+}
+
+// ---- 逻辑事件 → 表现层 ----
 
 session.events.on('slider-spawned', ({ slider, layer, axisChanged }) => {
-  view.spawnSlider(slider, layer, axisChanged); // 换向段首层高亮
+  view.spawnSlider(slider, layer, axisChanged);
   if (axisChanged) {
     view.ring(slider.x, slider.y, slider.z, Math.max(slider.width, slider.depth));
     audio.turn();
@@ -53,14 +75,14 @@ session.events.on('placed', ({ block, debris, layer, kind }) => {
   if (kind === 'perfect') {
     view.ring(
       block.x,
-      block.y + CONFIG.BLOCK_HEIGHT / 2 + 0.02, // 贴着块顶面扩散
+      block.y + CONFIG.BLOCK_HEIGHT / 2 + 0.02,
       block.z,
       Math.max(block.width, block.depth),
     );
     audio.perfect(session.combo);
     hud.popup(
       session.combo >= 2 ? `完美 ×${session.combo}` : '完美',
-      session.combo >= CONFIG.GROW_AFTER, // 即将/正在回涨时转金色
+      session.combo >= CONFIG.GROW_AFTER,
     );
   } else {
     audio.cut();
@@ -71,11 +93,22 @@ session.events.on('game-over', ({ layers, maxCombo, fallen }) => {
   view.spawnDebris([fallen], session.topBlock, session.tower.length);
   view.startGameOver(session.topBlock);
   audio.over();
+
+  const prevBest = loadBest();
+  const isNewBest = layers > prevBest;
+  if (isNewBest) saveBest(layers);
+
   phase = 'over';
   overAt = performance.now();
-  // 先让坠块与镜头拉远演 0.7s，再上结算屏
+  // 坠块 + 镜头拉远演 0.7s，再上结算屏与卡片
   window.setTimeout(() => {
-    if (phase === 'over') screens.showGameOver(layers, maxCombo);
+    if (phase !== 'over') return;
+    screens.showGameOver(
+      layers, maxCombo,
+      isNewBest ? '新纪录！' : `最高纪录 ${Math.max(prevBest, layers)} 层`,
+    );
+    renderShareCard(shareCanvas, { layers, maxCombo, isNewBest, tower: session.tower });
+    screens.setShareImage(shareCanvas.toDataURL('image/png'));
   }, 700);
 });
 
@@ -83,6 +116,7 @@ session.events.on('game-over', ({ layers, maxCombo, fallen }) => {
 
 function restart(): void {
   screens.hideGameOver();
+  screens.resetShare();
   view.reset();
   session.reset();
   hud.reset();
@@ -90,37 +124,36 @@ function restart(): void {
 }
 
 onTap(() => {
-  audio.unlock(); // 手势内解锁音频（锁定决策 #4）
+  audio.unlock();
   if (phase === 'title') {
     screens.hideTitle();
     hud.setVisible(true);
     phase = 'playing';
-    return; // 开始游戏的那次点按不落块
+    return;
   }
   if (phase === 'playing') {
     session.tap();
     return;
   }
-  // over：800ms 防误触（连打导致的失误手，常会下意识再点一下）
   if (performance.now() - overAt < 800) return;
   restart();
 });
 
 // ---- 启动 ----
 
-session.reset();          // 塔与滑块就位，静止展示在标题屏背后
+session.reset();
 hud.setVisible(false);
+screens.setTitleBest(loadBest());
 screens.showTitle();
 loop_start();
 
 function loop_start(): void {
   const loop = new GameLoop((dt) => {
-    if (phase !== 'title') session.update(dt); // 标题阶段冻结滑块，不让玩家凭空承受计时压力
+    if (phase !== 'title') session.update(dt);
     view.syncSlider(session.slider);
     view.update(dt, session.topBlock);
     gameScene.render();
   });
   loop.start();
-  // 首帧渲染完成后撤掉 loading 遮罩
   requestAnimationFrame(() => document.getElementById('loading')?.remove());
 }
